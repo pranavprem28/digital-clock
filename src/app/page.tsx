@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlarmClock,
+  ChevronDown,
   Clock3,
   Globe2,
   Moon,
@@ -13,6 +14,7 @@ import {
 
 type Tab = "clock" | "alarm" | "stopwatch" | "world";
 type Theme = "dark" | "light";
+
 type AlarmItem = {
   id: string;
   time: string;
@@ -91,7 +93,12 @@ const formatStopwatch = (ms: number) => {
   return `${pad(minutes)}:${pad(seconds)}:${pad(milliseconds)}`;
 };
 
-const formatWorldTime = (date: Date, timezone: string, is24Hour: boolean, locale: string) =>
+const formatWorldTime = (
+  date: Date,
+  timezone: string,
+  is24Hour: boolean,
+  locale: string
+) =>
   new Intl.DateTimeFormat(locale, {
     timeZone: timezone,
     hour: "2-digit",
@@ -128,11 +135,14 @@ export default function Page() {
   const [theme, setTheme] = useState<Theme>("dark");
   const [is24Hour, setIs24Hour] = useState(true);
   const [now, setNow] = useState<Date | null>(null);
+
   const [alarms, setAlarms] = useState<AlarmItem[]>([]);
   const [alarmInput, setAlarmInput] = useState("07:00");
   const [ringingAlarmId, setRingingAlarmId] = useState<string | null>(null);
+
   const [selectedTimezone, setSelectedTimezone] = useState(timezoneOptions[0].timezone);
   const [worldClocks, setWorldClocks] = useState<WorldClockItem[]>(defaultWorldClocks);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -200,6 +210,17 @@ export default function Page() {
   }, [mounted]);
 
   useEffect(() => {
+    if (!dropdownOpen) return;
+
+    const handleClickOutside = () => {
+      setDropdownOpen(false);
+    };
+
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [dropdownOpen]);
+
+  useEffect(() => {
     if (!now) return;
 
     const currentTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -257,7 +278,9 @@ export default function Page() {
       if (!audioContextRef.current) {
         const AudioCtx =
           window.AudioContext ||
-          (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+            .webkitAudioContext;
+
         if (!AudioCtx) return;
         audioContextRef.current = new AudioCtx();
       }
@@ -282,7 +305,7 @@ export default function Page() {
         oscillator.stop(nowTime + i * 0.35 + 0.22);
       }
     } catch {
-      // Ignore audio errors silently.
+      // ignore
     }
   };
 
@@ -345,14 +368,21 @@ export default function Page() {
     if (!selected) return;
 
     const exists = worldClocks.some((clock) => clock.timezone === selected.timezone);
-    if (exists) return;
+    if (exists) {
+      setDropdownOpen(false);
+      return;
+    }
 
     setWorldClocks((prev) => [...prev, { ...selected, id: createId() }]);
+    setDropdownOpen(false);
   };
 
   const removeWorldClock = (id: string) => {
     setWorldClocks((prev) => prev.filter((clock) => clock.id !== id));
   };
+
+  const selectedTimezoneLabel =
+    timezoneOptions.find((option) => option.timezone === selectedTimezone);
 
   const clockDisplay = useMemo(() => {
     if (!now) return "--:--:--";
@@ -388,6 +418,11 @@ export default function Page() {
             "border border-emerald-400/30 bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25",
           input:
             "border-white/10 bg-white/5 text-white placeholder:text-white/35 focus:ring-cyan-400/40",
+          dropdown:
+            "absolute z-50 mt-2 max-h-60 w-full overflow-auto rounded-2xl border border-white/10 bg-slate-900 shadow-xl backdrop-blur-xl",
+          dropdownItem:
+            "block w-full px-4 py-3 text-left text-sm text-white transition hover:bg-cyan-500/20",
+          dropdownItemActive: "bg-cyan-500/15 text-cyan-300",
         }
       : {
           page:
@@ -411,13 +446,20 @@ export default function Page() {
             "border border-emerald-300 bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
           input:
             "border-slate-200 bg-white/80 text-slate-900 placeholder:text-slate-400 focus:ring-sky-300",
+          dropdown:
+            "absolute z-50 mt-2 max-h-60 w-full overflow-auto rounded-2xl border border-slate-200 bg-white shadow-xl backdrop-blur-xl",
+          dropdownItem:
+            "block w-full px-4 py-3 text-left text-sm text-slate-800 transition hover:bg-sky-100",
+          dropdownItemActive: "bg-sky-100 text-sky-700",
         };
 
   if (!mounted) {
     return (
       <main className="min-h-screen bg-slate-950 text-white">
         <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center p-6">
-          <div className="text-lg font-medium tracking-wide text-white/70">Loading dashboard...</div>
+          <div className="text-lg font-medium tracking-wide text-white/70">
+            Loading dashboard...
+          </div>
         </div>
       </main>
     );
@@ -433,7 +475,9 @@ export default function Page() {
                 <p className={`text-sm uppercase tracking-[0.35em] ${themeClasses.muted}`}>
                   Smart Clock Dashboard
                 </p>
-                <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Digital Clock, Alarm, Stopwatch & World Time</h1>
+                <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">
+                  Digital Clock, Alarm, Stopwatch & World Time
+                </h1>
               </div>
 
               <button
@@ -454,6 +498,7 @@ export default function Page() {
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = tab === item.key;
+
                 return (
                   <button
                     key={item.key}
@@ -475,10 +520,16 @@ export default function Page() {
                   <p className={`mb-3 text-sm uppercase tracking-[0.3em] ${themeClasses.muted}`}>
                     Current Time
                   </p>
-                  <div className={`text-6xl font-extrabold tracking-[0.18em] sm:text-8xl md:text-[6.5rem] ${themeClasses.clockGlow}`}>
+
+                  <div
+                    className={`text-6xl font-extrabold tracking-[0.18em] sm:text-8xl md:text-[6.5rem] ${themeClasses.clockGlow}`}
+                  >
                     {clockDisplay}
                   </div>
-                  <p className={`mt-5 text-base sm:text-lg ${themeClasses.muted}`}>{dateDisplay}</p>
+
+                  <p className={`mt-5 text-base sm:text-lg ${themeClasses.muted}`}>
+                    {dateDisplay}
+                  </p>
 
                   <button
                     onClick={() => setIs24Hour((prev) => !prev)}
@@ -532,26 +583,35 @@ export default function Page() {
                   <div className={`rounded-[24px] p-5 ${themeClasses.card}`}>
                     <div className="flex items-center justify-between gap-3">
                       <h2 className="text-xl font-semibold">Saved Alarms</h2>
-                      <span className={`text-sm ${themeClasses.muted}`}>{alarms.length} total</span>
+                      <span className={`text-sm ${themeClasses.muted}`}>
+                        {alarms.length} total
+                      </span>
                     </div>
 
                     <div className="mt-5 space-y-3">
                       {alarms.length === 0 ? (
-                        <div className={`rounded-2xl border border-dashed p-8 text-center ${themeClasses.muted}`}>
+                        <div
+                          className={`rounded-2xl border border-dashed p-8 text-center ${themeClasses.muted}`}
+                        >
                           No alarms added yet.
                         </div>
                       ) : (
                         alarms.map((alarm) => {
                           const isRinging = ringingAlarmId === alarm.id;
+
                           return (
                             <div
                               key={alarm.id}
                               className={`flex flex-col gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
-                                isRinging ? "border-rose-400/30 bg-rose-400/10" : "border-white/10"
+                                isRinging
+                                  ? "border-rose-400/30 bg-rose-400/10"
+                                  : "border-white/10"
                               }`}
                             >
                               <div>
-                                <p className="text-2xl font-bold tracking-[0.15em]">{alarm.time}</p>
+                                <p className="text-2xl font-bold tracking-[0.15em]">
+                                  {alarm.time}
+                                </p>
                                 <p className={`text-sm ${themeClasses.muted}`}>
                                   {alarm.enabled ? "Enabled" : "Disabled"}
                                 </p>
@@ -564,6 +624,7 @@ export default function Page() {
                                 >
                                   {alarm.enabled ? "Turn Off" : "Turn On"}
                                 </button>
+
                                 <button
                                   onClick={() => deleteAlarm(alarm.id)}
                                   className={`rounded-xl px-3 py-2 transition hover:scale-[1.02] ${themeClasses.buttonDanger}`}
@@ -583,11 +644,16 @@ export default function Page() {
 
               {tab === "stopwatch" && (
                 <div className="grid min-h-[430px] gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div className={`flex flex-col items-center justify-center rounded-[24px] p-5 text-center ${themeClasses.card}`}>
+                  <div
+                    className={`flex flex-col items-center justify-center rounded-[24px] p-5 text-center ${themeClasses.card}`}
+                  >
                     <p className={`mb-3 text-sm uppercase tracking-[0.3em] ${themeClasses.muted}`}>
                       Stopwatch
                     </p>
-                    <div className={`text-5xl font-black tracking-[0.15em] sm:text-7xl ${themeClasses.clockGlow}`}>
+
+                    <div
+                      className={`text-5xl font-black tracking-[0.15em] sm:text-7xl ${themeClasses.clockGlow}`}
+                    >
                       {formatStopwatch(elapsedMs)}
                     </div>
 
@@ -632,7 +698,9 @@ export default function Page() {
 
                     <div className="mt-5 max-h-[300px] space-y-3 overflow-auto pr-1">
                       {laps.length === 0 ? (
-                        <div className={`rounded-2xl border border-dashed p-8 text-center ${themeClasses.muted}`}>
+                        <div
+                          className={`rounded-2xl border border-dashed p-8 text-center ${themeClasses.muted}`}
+                        >
                           No laps recorded yet.
                         </div>
                       ) : (
@@ -642,7 +710,9 @@ export default function Page() {
                             className="flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3"
                           >
                             <span className="font-medium">Lap {laps.length - index}</span>
-                            <span className="font-mono text-lg">{formatStopwatch(lap.value)}</span>
+                            <span className="font-mono text-lg">
+                              {formatStopwatch(lap.value)}
+                            </span>
                           </div>
                         ))
                       )}
@@ -660,17 +730,51 @@ export default function Page() {
                     </p>
 
                     <div className="mt-6 space-y-4">
-                      <select
-                        value={selectedTimezone}
-                        onChange={(e) => setSelectedTimezone(e.target.value)}
-                        className={`w-full rounded-2xl border px-4 py-3 outline-none focus:ring-2 ${themeClasses.input}`}
-                      >
-                        {timezoneOptions.map((option) => (
-                          <option key={option.timezone} value={option.timezone}>
-                            {option.city} — {option.timezone}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDropdownOpen((prev) => !prev);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left outline-none focus:ring-2 ${themeClasses.input}`}
+                        >
+                          <span className="truncate">
+                            {selectedTimezoneLabel?.city} — {selectedTimezone}
+                          </span>
+                          <ChevronDown
+                            size={18}
+                            className={`ml-3 shrink-0 transition-transform duration-200 ${
+                              dropdownOpen ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {dropdownOpen && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className={themeClasses.dropdown}
+                          >
+                            {timezoneOptions.map((option) => (
+                              <button
+                                key={option.timezone}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTimezone(option.timezone);
+                                  setDropdownOpen(false);
+                                }}
+                                className={`${themeClasses.dropdownItem} ${
+                                  selectedTimezone === option.timezone
+                                    ? themeClasses.dropdownItemActive
+                                    : ""
+                                }`}
+                              >
+                                {option.city} — {option.timezone}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       <button
                         onClick={addWorldClock}
@@ -682,7 +786,8 @@ export default function Page() {
                       <div className={`rounded-2xl p-4 ${themeClasses.soft}`}>
                         <p className="text-sm font-medium">Format</p>
                         <p className={`mt-1 text-sm ${themeClasses.muted}`}>
-                          Currently showing {is24Hour ? "24-hour" : "12-hour"} time across all cities.
+                          Currently showing {is24Hour ? "24-hour" : "12-hour"} time across
+                          all cities.
                         </p>
                       </div>
                     </div>
@@ -691,7 +796,9 @@ export default function Page() {
                   <div className={`rounded-[24px] p-5 ${themeClasses.card}`}>
                     <div className="flex items-center justify-between gap-3">
                       <h2 className="text-xl font-semibold">World Clock</h2>
-                      <span className={`text-sm ${themeClasses.muted}`}>{worldClocks.length} cities</span>
+                      <span className={`text-sm ${themeClasses.muted}`}>
+                        {worldClocks.length} cities
+                      </span>
                     </div>
 
                     <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -703,8 +810,11 @@ export default function Page() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-lg font-semibold">{clock.city}</p>
-                              <p className={`mt-1 text-xs ${themeClasses.muted}`}>{clock.timezone}</p>
+                              <p className={`mt-1 text-xs ${themeClasses.muted}`}>
+                                {clock.timezone}
+                              </p>
                             </div>
+
                             <button
                               onClick={() => removeWorldClock(clock.id)}
                               className={`rounded-xl px-3 py-2 transition ${themeClasses.buttonDanger}`}
@@ -714,7 +824,9 @@ export default function Page() {
                             </button>
                           </div>
 
-                          <div className={`mt-6 text-3xl font-bold tracking-[0.12em] ${themeClasses.clockGlow}`}>
+                          <div
+                            className={`mt-6 text-3xl font-bold tracking-[0.12em] ${themeClasses.clockGlow}`}
+                          >
                             {formatWorldTime(now, clock.timezone, is24Hour, clock.locale)}
                           </div>
 
@@ -722,7 +834,9 @@ export default function Page() {
                             <p className={`text-sm ${themeClasses.muted}`}>
                               {formatWorldDate(now, clock.timezone, clock.locale)}
                             </p>
-                            <span className={`rounded-full px-3 py-1 text-xs ${themeClasses.soft}`}>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs ${themeClasses.soft}`}
+                            >
                               {getTimezoneOffsetLabel(clock.timezone, now)}
                             </span>
                           </div>
